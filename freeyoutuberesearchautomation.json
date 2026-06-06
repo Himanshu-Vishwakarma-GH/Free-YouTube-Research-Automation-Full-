@@ -1,0 +1,782 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "YouTube Free Research Tool",
+        "formDescription": "Enter a topic to find the most viral YouTube videos globally.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Keyword or Topic",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "form-id-full",
+      "name": "YouTube_Topic_Form",
+      "position": [
+        -80,
+        0
+      ],
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "webhookId": "41ea4d7b-a7d3-4ef3-8a18-9e3ec2a81f84"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json[\"Keyword or Topic\"] }}"
+            },
+            {
+              "name": "type",
+              "value": "video"
+            },
+            {
+              "name": "order",
+              "value": "relevance"
+            },
+            {
+              "name": "maxResults",
+              "value": "5"
+            },
+            {
+              "name": "relevanceLanguage",
+              "value": "en"
+            },
+            {
+              "name": "key",
+              "value": "={{ $('YouTube_Topic_Form').first().json[\"__yt_api_key\"] || 'AIzaSyBQ-w8MNWy2i0OArczP3qOjYbsDsTJ42X0' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "search-id-full",
+      "name": "YouTube_Search",
+      "position": [
+        96,
+        0
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "split-id-full",
+      "name": "Split_Videos",
+      "position": [
+        272,
+        0
+      ],
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet,statistics"
+            },
+            {
+              "name": "id",
+              "value": "={{ $json.id.videoId }}"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyBQ-w8MNWy2i0OArczP3qOjYbsDsTJ42X0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "details-id-full",
+      "name": "YouTube_Video_Details",
+      "position": [
+        608,
+        0
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "extract-video-id",
+      "name": "Extract_Video",
+      "position": [
+        800,
+        0
+      ],
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "statistics"
+            },
+            {
+              "name": "id",
+              "value": "={{ $json.snippet.channelId }}"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyBQ-w8MNWy2i0OArczP3qOjYbsDsTJ42X0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "stats-id-full",
+      "name": "YouTube_Channel_Details",
+      "position": [
+        1008,
+        0
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "split-channel-id",
+      "name": "Extract_Channel",
+      "position": [
+        1200,
+        0
+      ],
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "views-gt-1000",
+              "leftValue": "={{ $json.statistics.viewCount }}",
+              "operator": {
+                "operation": "gt",
+                "type": "number"
+              },
+              "rightValue": 1000
+            },
+            {
+              "id": "views-gt-subs",
+              "leftValue": "={{ $json.statistics.viewCount }}",
+              "operator": {
+                "operation": "gt",
+                "type": "number"
+              },
+              "rightValue": "={{ $json.statistics.subscriberCount }}"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-id-full",
+      "name": "Outlier_Filter",
+      "position": [
+        1408,
+        0
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const videoId = $('Extract_Video').item.json.id;\nconst title = $('Extract_Video').item.json.snippet.title;\nconst thumbnails = $('Extract_Video').item.json.snippet.thumbnails;\nconst thumbnail = thumbnails.maxres ? thumbnails.maxres.url : (thumbnails.high ? thumbnails.high.url : thumbnails.medium.url);\nconst channelSubscribers = $json.statistics.subscriberCount;\nconst videoViews = $('Extract_Video').item.json.statistics.viewCount;\n\nlet transcript = 'No transcript available';\ntry {\n  const res = await this.helpers.httpRequest({\n    method: 'GET',\n    url: `https://youtube-transcript.vercel.app/api/transcript?id=${videoId}`,\n  });\n  if (Array.isArray(res)) {\n    transcript = res.map(t => t.text).join(' ');\n  } else {\n    transcript = JSON.stringify(res).slice(0, 3000);\n  }\n} catch(e) {\n  transcript = 'Transcript unavailable: ' + e.message;\n}\n\nreturn {\n  json: {\n    videoId,\n    title,\n    thumbnail,\n    channelSubscribers,\n    videoViews,\n    transcript\n  }\n};"
+      },
+      "id": "scraper-id-full",
+      "name": "Transcript_Scraper",
+      "position": [
+        1600,
+        -16
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this YouTube video and return a JSON object only. No extra text.\n\nTitle: {{ $json.title }}\nViews: {{ $json.videoViews }}\nChannel Subscribers: {{ $json.channelSubscribers }}\nTranscript: {{ $json.transcript }}\nThumbnail: {{ $json.thumbnail }}\n\nReturn JSON like:\n{\n  \"newTitle\": \"...\",\n  \"thumbnailText\": \"...\",\n  \"newOutline\": \"...\",\n  \"viralReason\": \"...\"\n} {{ $json.title }}",
+        "options": {}
+      },
+      "id": "agent-id-full",
+      "name": "Free_AI_Analysis_Agent",
+      "position": [
+        16,
+        336
+      ],
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7
+    },
+    {
+      "parameters": {
+        "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+        "options": {}
+      },
+      "id": "model-id-full",
+      "name": "OpenRouter_Gemini_Free",
+      "position": [
+        48,
+        528
+      ],
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "credentials": {
+        "openRouterApi": {
+          "id": "dYmjYCq5S18vnbti",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1NWob-64C9l9nEzwt2aGJcqjmw3iG3pgMGubqj28Ykq8",
+          "mode": "list",
+          "cachedResultName": "Final_Storage_Sheets",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NWob-64C9l9nEzwt2aGJcqjmw3iG3pgMGubqj28Ykq8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1NWob-64C9l9nEzwt2aGJcqjmw3iG3pgMGubqj28Ykq8/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Search_Topic",
+              "displayName": "Search_Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Video_ID",
+              "displayName": "Video_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Original_Title",
+              "displayName": "Original_Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Video_Views",
+              "displayName": "Video_Views",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Channel_Subscribers",
+              "displayName": "Channel_Subscribers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Viral_Reason",
+              "displayName": "Viral_Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "New_Title",
+              "displayName": "New_Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Thumbnail_Text",
+              "displayName": "Thumbnail_Text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SEO_Title",
+              "displayName": "SEO_Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Hook_Script",
+              "displayName": "Hook_Script",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Body_Script",
+              "displayName": "Body_Script",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CTA_Script",
+              "displayName": "CTA_Script",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Thumbnail_Concepts",
+              "displayName": "Thumbnail_Concepts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SEO_Description",
+              "displayName": "SEO_Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SEO_Tags",
+              "displayName": "SEO_Tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Thumbnail_URL",
+              "displayName": "Thumbnail_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "sheets-id-full",
+      "name": "Final_Storage_Sheets",
+      "position": [
+        1392,
+        336
+      ],
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zv3z7jafNA5L6Vm1",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        528
+      ],
+      "id": "996b128c-4d67-4a46-93ff-2e7a3ad1d059",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "j2cYYOfKet9UXjWn",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract JSON from the AI analysis agent's text output\nconst agentOutput = $json.output || '';\nlet analysisData = {};\ntry {\n  const jsonMatch = agentOutput.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) { analysisData = JSON.parse(jsonMatch[0]); }\n} catch(e) { analysisData = {}; }\n\n// Pull video metadata from Transcript_Scraper\nconst videoData = $('Transcript_Scraper').item.json;\n\nreturn {\n  json: {\n    videoId: videoData.videoId || '',\n    originalTitle: videoData.title || '',\n    thumbnail: videoData.thumbnail || '',\n    videoViews: videoData.videoViews || '0',\n    channelSubscribers: videoData.channelSubscribers || '0',\n    transcript: (videoData.transcript || '').slice(0, 1500),\n    newTitle: analysisData.newTitle || '',\n    thumbnailText: analysisData.thumbnailText || '',\n    newOutline: analysisData.newOutline || '',\n    viralReason: analysisData.viralReason || ''\n  }\n};"
+      },
+      "id": "parse-output-id",
+      "name": "Parse_Agent_Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are writing a production-ready YouTube script for a creator researching the topic: \"{{ $('YouTube_Topic_Form').first().json[\"Keyword or Topic\"] }}\"\n\n=== VIRAL VIDEO ANALYSIS (Module 1 Output) ===\nOriginal Title: {{ $json.originalTitle }}\nVideo Views: {{ $json.videoViews }}\nChannel Subscribers: {{ $json.channelSubscribers }}\nWhy It Went Viral: {{ $json.viralReason }}\nNew Optimized Title: {{ $json.newTitle }}\nContent Outline: {{ $json.newOutline }}\n\n=== ORIGINAL VIDEO TRANSCRIPT (Content Reference) ===\n{{ $json.transcript }}\n\n=== YOUR TASK ===\nWrite a NEW, original YouTube script INSPIRED by this viral video on the topic: \"{{ $('YouTube_Topic_Form').first().json[\"Keyword or Topic\"] }}\"\nDo NOT copy the original. Use it as research to write something better.\n\nReturn ONLY valid JSON:\n{\n  \"hook\": \"First 30 seconds: bold claim + pattern interrupt to stop the scroll\",\n  \"body\": \"Full script with [Section 1], [Section 2], [Section 3] — each 150-200 words of actual script\",\n  \"cta\": \"End screen subscribe CTA + tease next related video\",\n  \"thumbnailConcepts\": [\"Visual concept 1 (describe the image)\", \"Visual concept 2\", \"Visual concept 3\"],\n  \"seoTitle\": \"SEO-optimized title under 60 characters for the topic\",\n  \"seoDescription\": \"2-3 paragraph YouTube description with keywords and timestamps placeholder\",\n  \"seoTags\": [\"tag1\", \"tag2\", \"tag3\", \"tag4\", \"tag5\", \"tag6\", \"tag7\"]\n}",
+        "options": {}
+      },
+      "id": "script-agent-id",
+      "name": "Script_Generator_Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        688,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+        "options": {}
+      },
+      "id": "script-model-id",
+      "name": "OpenRouter_Script_Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        592,
+        512
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "dYmjYCq5S18vnbti",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse the Script Generator agent's JSON output safely\nconst agentOutput = $json.output || '';\nlet scriptData = {};\n\nif (agentOutput.trim()) {\n  try {\n    const jsonMatch = agentOutput.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) { scriptData = JSON.parse(jsonMatch[0]); }\n  } catch(e) {\n    scriptData = { hook: agentOutput.slice(0, 500), body: '', cta: '', thumbnailConcepts: [], seoTitle: '', seoDescription: '', seoTags: [] };\n  }\n}\n\n// If no output from AI (empty response), skip this item gracefully\nif (!agentOutput.trim()) {\n  return [];\n}\n\n// Get enriched analysis data from Module 1\nconst a = $('Parse_Agent_Output').item.json;\nconst searchTopic = $('YouTube_Topic_Form').first().json['Keyword or Topic'] || '';\n\nreturn {\n  json: {\n    Timestamp: new Date().toISOString(),\n    Search_Topic: searchTopic,\n    Video_ID: a.videoId || '',\n    Original_Title: a.originalTitle || '',\n    Video_Views: a.videoViews || '',\n    Channel_Subscribers: a.channelSubscribers || '',\n    Viral_Reason: a.viralReason || '',\n    New_Title: a.newTitle || '',\n    Thumbnail_Text: a.thumbnailText || '',\n    SEO_Title: scriptData.seoTitle || '',\n    Hook_Script: scriptData.hook || '',\n    Body_Script: scriptData.body || '',\n    CTA_Script: scriptData.cta || '',\n    Thumbnail_Concepts: Array.isArray(scriptData.thumbnailConcepts) ? scriptData.thumbnailConcepts.join(' | ') : '',\n    SEO_Description: scriptData.seoDescription || '',\n    SEO_Tags: Array.isArray(scriptData.seoTags) ? scriptData.seoTags.join(', ') : '',\n    Thumbnail_URL: a.thumbnail || ''\n  }\n};"
+      },
+      "id": "build-row-id",
+      "name": "Build_Sheet_Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        704,
+        512
+      ],
+      "id": "76afe43f-0a49-4be3-8a1b-b602dcf6357a",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "j2cYYOfKet9UXjWn",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the original search keyword from the form\nconst keyword = $('YouTube_Topic_Form').first().json[\"Keyword or Topic\"] || '';\nconst keyWords = keyword.toLowerCase().split(' ').filter(w => w.length > 2);\n\nif (keyWords.length === 0) return $input.all();\n\n// Score each video: how many keywords appear in title or description\nconst scored = $input.all().map(item => {\n  const title = (item.json.snippet?.title || '').toLowerCase();\n  const desc = (item.json.snippet?.description || '').toLowerCase();\n  const matchCount = keyWords.filter(w => title.includes(w) || desc.includes(w)).length;\n  const score = matchCount / keyWords.length;\n  return { item, score };\n});\n\n// Sort by relevance score descending, keep top half (at least 5)\nscored.sort((a, b) => b.score - a.score);\nconst minKeep = Math.min(5, scored.length);\nconst threshold = Math.max(0.25, scored[minKeep - 1]?.score || 0);\n\nconst filtered = scored\n  .filter(s => s.score >= threshold)\n  .map(s => s.item);\n\nreturn filtered.length > 0 ? filtered : $input.all().slice(0, 5);"
+      },
+      "id": "relevance-filter-id",
+      "name": "Relevance_Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "YouTube_Topic_Form": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "YouTube_Search",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "YouTube_Search": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Split_Videos",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Split_Videos": {
+      "main": [
+        [
+          {
+            "node": "Relevance_Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube_Video_Details": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Extract_Video",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Extract_Video": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "YouTube_Channel_Details",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "YouTube_Channel_Details": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Extract_Channel",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Extract_Channel": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Outlier_Filter",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Outlier_Filter": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Transcript_Scraper",
+            "type": "main"
+          }
+        ],
+        []
+      ]
+    },
+    "Transcript_Scraper": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Free_AI_Analysis_Agent",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Free_AI_Analysis_Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse_Agent_Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter_Gemini_Free": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Free_AI_Analysis_Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final_Storage_Sheets": {
+      "main": [
+        []
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        []
+      ]
+    },
+    "Parse_Agent_Output": {
+      "main": [
+        [
+          {
+            "node": "Script_Generator_Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Script_Generator_Agent": {
+      "main": [
+        [
+          {
+            "node": "Build_Sheet_Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter_Script_Model": {
+      "main": [
+        []
+      ],
+      "ai_languageModel": [
+        [
+          {
+            "node": "Script_Generator_Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build_Sheet_Row": {
+      "main": [
+        [
+          {
+            "node": "Final_Storage_Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        []
+      ]
+    },
+    "Relevance_Filter": {
+      "main": [
+        [
+          {
+            "node": "YouTube_Video_Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3a64c10c07678a5f6cedeb76313761f3bd66f42507c53d9195c5a1fd19111ee7"
+  }
+}
